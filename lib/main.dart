@@ -1,5 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+
+// 使用 window.defaultRouteName 必须导入当前 UI 库
 import 'dart:ui';
+
+import 'package:flutter/services.dart';
 
 void main() => runApp(
     /// 该构造方法中传入从 Android 中传递来的参数
@@ -12,7 +18,6 @@ class MyApp extends StatelessWidget {
   /// 构造方法 , 获取从 Android 中传递来的参数
   const MyApp({Key? key, required this.initParams}):super(key: key);
 
-  // This widget is the root of your application.
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
@@ -20,7 +25,7 @@ class MyApp extends StatelessWidget {
       theme: ThemeData(
         primarySwatch: Colors.blue,
       ),
-      home: MyHomePage(title: initParams),
+      home: MyHomePage(title: "初始参数 : $initParams"),
     );
   }
 }
@@ -34,12 +39,59 @@ class MyHomePage extends StatefulWidget {
 }
 
 class _MyHomePageState extends State<MyHomePage> {
-  int _counter = 0;
+  /// 展示从 Native 获取的消息
+  String showMessage = "";
 
-  void _incrementCounter() {
-    setState(() {
-      _counter++;
-    });
+  static const BasicMessageChannel _basicMessageChannel =
+    const BasicMessageChannel('BasicMessageChannel', StringCodec());
+
+  static const MethodChannel _methodChannel =
+    const MethodChannel('MethodChannel');
+
+  static const EventChannel _eventChannel =
+    EventChannel('EventChannel');
+
+  /// 监听 EventChannel 数据的句柄
+  late StreamSubscription _streamSubscription;
+
+  /// 当前使用的消息通道是否是 MethodChannel
+  bool _isMethodChannel = false;
+
+  @override
+  void initState() {
+    /// 从 BasicMessageChannel 通道获取消息
+    _basicMessageChannel.setMessageHandler((message) => Future<String>((){
+      setState(() {
+        showMessage = "BasicMessageChannel : $message";
+      });
+      return "BasicMessageChannel : $message";
+    }));
+
+    // 注册 EventChannel 监听
+    _streamSubscription = _eventChannel
+        .receiveBroadcastStream()
+        /// StreamSubscription<T> listen(void onData(T event)?,
+        ///   {Function? onError, void onDone()?, bool? cancelOnError});
+        .listen(
+          /// EventChannel 接收到 Native 信息后 , 回调的方法
+          (message) {
+            setState(() {
+            /// 接收到消息 , 显示在界面中
+            showMessage = message;
+            });
+          },
+          onError: (error){
+            print(error);
+          }
+        );
+    super.initState();
+  }
+
+  @override
+  void dispose() {
+    // 取消监听
+    _streamSubscription.cancel();
+    super.dispose();
   }
 
   @override
@@ -48,24 +100,38 @@ class _MyHomePageState extends State<MyHomePage> {
       appBar: AppBar(
         title: Text(widget.title),
       ),
-      body: Center(
+      body: Container(
+        alignment: Alignment.topCenter,
+        decoration: BoxDecoration(color: Colors.amber),
+        margin: EdgeInsets.only(top: 0),
         child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: <Widget>[
-            Text(
-              'You have pushed the button this many times:',
+          children: [
+
+            SwitchListTile(
+                value: _isMethodChannel,
+                onChanged: (bool value){
+                  _isMethodChannel = value;
+                },
+                title: Text(
+                    _isMethodChannel?"MethodChannel":"BasicMessageChannel",
+                ),
             ),
-            Text(
-              '$_counter',
-              style: Theme.of(context).textTheme.headline4,
+
+            TextField(
+              /// 通过输入框动态变化 , 向 Native 发送消息
+              onChanged: (value) async{
+                String response;
+                if(_isMethodChannel){
+                  response = await _methodChannel.invokeMethod("send", value);
+                } else {
+                  response = await _basicMessageChannel.send(value);
+                }
+              },
             ),
+
+            Text("Native 传输的消息 : $showMessage"),
           ],
         ),
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _incrementCounter,
-        tooltip: 'Increment',
-        child: Icon(Icons.add),
       ), // This trailing comma makes auto-formatting nicer for build methods.
     );
   }
