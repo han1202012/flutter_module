@@ -67,7 +67,50 @@ class _MyHomePageState extends State<MyHomePage> {
       return "BasicMessageChannel : $message";
     }));
 
-    // 注册 EventChannel 监听
+    /// 这里延迟 6 秒在注册该事件
+    ///   一定要先在 Android 中设置好 EventChannel
+    ///   然后 , 才能在 Flutter 中设置监听
+    ///   否则 , 无法成功
+    Future.delayed(const Duration(milliseconds: 6000), () {
+      // Here you can write your code
+
+      // 注册 EventChannel 监听
+      _streamSubscription = _eventChannel
+          .receiveBroadcastStream()
+      /// StreamSubscription<T> listen(void onData(T event)?,
+      ///   {Function? onError, void onDone()?, bool? cancelOnError});
+          .listen(
+        /// EventChannel 接收到 Native 信息后 , 回调的方法
+            (message) {
+              print("Flutter _eventChannel listen 回调");
+              setState(() {
+                /// 接收到消息 , 显示在界面中
+                showMessage = message;
+              });
+          },
+          onError: (error){
+            print("Flutter _eventChannel listen 出错");
+            print(error);
+          }
+      );
+
+      setState(() {
+      });
+
+    });
+
+    // Future<dynamic> Function(MethodCall call)? handler
+    _methodChannel.setMethodCallHandler((call) {
+      var method = call.method;
+      var arguments = call.arguments;
+      setState(() {
+        showMessage = "Android 端通过 MethodChannel 调用 Flutter 端 $method 方法, 参数为 $arguments";
+      });
+      return Future.value();
+    });
+
+
+    /*// 注册 EventChannel 监听
     _streamSubscription = _eventChannel
         .receiveBroadcastStream()
         /// StreamSubscription<T> listen(void onData(T event)?,
@@ -75,15 +118,20 @@ class _MyHomePageState extends State<MyHomePage> {
         .listen(
           /// EventChannel 接收到 Native 信息后 , 回调的方法
           (message) {
+            print("Flutter _eventChannel listen 回调");
             setState(() {
-            /// 接收到消息 , 显示在界面中
-            showMessage = message;
+              /// 接收到消息 , 显示在界面中
+              showMessage = message;
             });
           },
           onError: (error){
+            print("Flutter _eventChannel listen 出错");
             print(error);
           }
-        );
+        );*/
+
+    print("Flutter _eventChannel 注册完毕");
+
     super.initState();
   }
 
@@ -107,29 +155,27 @@ class _MyHomePageState extends State<MyHomePage> {
         child: Column(
           children: [
 
-            SwitchListTile(
-                value: _isMethodChannel,
-                onChanged: (bool value){
-                  _isMethodChannel = value;
-                },
-                title: Text(
-                    _isMethodChannel?"MethodChannel":"BasicMessageChannel",
-                ),
+            ElevatedButton(
+            onPressed: (){
+              _basicMessageChannel.send("Dart 端通过 BasicMessageChannel 向 Android 端发送消息 Hello !");
+            },
+              child: Text("BasicMessageChannel 向 Android 发送消息"),
             ),
 
-            TextField(
-              /// 通过输入框动态变化 , 向 Native 发送消息
-              onChanged: (value) async{
-                String response;
-                if(_isMethodChannel){
-                  response = await _methodChannel.invokeMethod("send", value);
-                } else {
-                  response = await _basicMessageChannel.send(value);
-                }
+            ElevatedButton(
+              onPressed: (){
+                _methodChannel.invokeMethod("method", "arguments");
               },
+              child: Text("MethodChannel 调用 Android 方法"),
             ),
 
-            Text("Native 传输的消息 : $showMessage"),
+            Container(
+              color: Colors.black,
+              child: Text(
+                "Native 传输的消息 : $showMessage",
+                style: TextStyle(color: Colors.green),),
+            ),
+
           ],
         ),
       ), // This trailing comma makes auto-formatting nicer for build methods.
